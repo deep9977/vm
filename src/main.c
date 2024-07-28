@@ -1,6 +1,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<errno.h>
 
 #define VM_STACK_CAPACITY 512 
 #define VM_INST_CAPACITY 1024
@@ -34,7 +35,7 @@ typedef struct{
     int stack[VM_STACK_CAPACITY];
     int sp;
     Inst program[VM_INST_CAPACITY];
-    int program_size;
+    size_t program_size;
     int ip;
 }VM;
 
@@ -47,27 +48,69 @@ typedef struct{
 #define inst_divi() ((Inst){.type = INST_DIVI})
 #define inst_jmp(operand1) ((Inst){.type = INST_JMP, .operand = operand1})
 Inst Program[]= {
-    inst_push(69),
-    inst_push(420),
-    inst_add(),
-    inst_push(3),
-    inst_push(2),
-    inst_mul(),
 
 };
-int Program_Size = sizeof(Program)/sizeof(Program[0]);
+size_t Program_Size = sizeof(Program)/sizeof(Program[0]);
 
 VM vm = {0};
+
+
+void write_program_to_file(VM vm ){
+    FILE *filefd;
+    filefd = fopen("./prog.vm", "wb" );
+    if(!filefd){
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    int fw = fwrite(vm.program, sizeof(vm.program[0]), vm.program_size, filefd);
+    if(fw != vm.program_size){
+        perror("fwrite");
+        exit(EXIT_FAILURE);
+    }
+}
+
+int load_program_from_file(VM *vm){
+    FILE *filefd;
+    filefd = fopen("./prog.vm", "rb" );
+    if(!filefd){
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    if(fseek(filefd, 0, SEEK_END)){
+        perror("fseek1");
+        exit(EXIT_FAILURE);
+    }
+    long file_size = ftell(filefd);
+    if(file_size <= 0){
+        perror("ftell");
+        exit(EXIT_FAILURE);
+    }
+    if(fseek(filefd, 0, SEEK_SET)){
+        perror("fseek2");
+        exit(EXIT_FAILURE);
+    }
+
+    if((file_size % sizeof(Inst)) != 0 ){
+        fprintf(stderr, "problem with .vm file");
+        exit(EXIT_FAILURE);
+    }
+    vm->program_size = file_size/sizeof(Inst);
+
+    int fr = fread(vm->program, vm->program_size, sizeof(Inst), filefd);
+    if(fr <= 0){
+        perror("fread");
+        exit(EXIT_FAILURE);
+    }
+
+}
 
 int load_program_from_memory(VM *vm){
     if(Program_Size > VM_INST_CAPACITY) return EXIT_FAILURE; 
 
     memcpy(vm->program, Program, sizeof(Program[0]) * Program_Size);
     vm->program_size = Program_Size;
-}
-
-int write_program_to_file(VM vm){
-    
 }
 
 Trap vm_execute_inst(VM *vm, Inst inst){
@@ -135,8 +178,10 @@ void dump_mem(VM vm){
 }
 
 
-int main(){
+int main(void){
     load_program_from_memory(&vm);
+    write_program_to_file(vm);
+    load_program_from_file(&vm);
     while(vm.ip < vm.program_size && vm.ip >= 0){
         Trap trap = vm_execute_inst(&vm ,vm.program[vm.ip]);
         if(trap != TRAP_OK){
@@ -146,7 +191,5 @@ int main(){
     }
     
     dump_mem(vm);
-
-
     return EXIT_SUCCESS;
 }
