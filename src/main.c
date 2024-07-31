@@ -54,6 +54,74 @@ size_t Program_Size = sizeof(Program)/sizeof(Program[0]);
 
 VM vm = {0};
 
+size_t get_file_size(FILE *filefd){
+
+    if(fseek(filefd, 0, SEEK_END)){
+        perror("fseek1");
+        exit(EXIT_FAILURE);
+    }
+    long file_size = ftell(filefd);
+    if(file_size <= 0){
+        perror("ftell");
+        exit(EXIT_FAILURE);
+    }
+    if(fseek(filefd, 0, SEEK_SET)){
+        perror("fseek2");
+        exit(EXIT_FAILURE);
+    }    
+    return file_size;
+}
+
+Inst translate_line(char *line){
+    size_t line_size = strlen(line);
+    char str[4]; 
+    int operand;
+
+    if(sscanf(line, "%4s %d", &str, &operand) == 1) printf("str: %s\n", str);
+    else printf("str: %s, operand: %d\n", str, operand);
+
+}
+
+void translate_asm(char *source){
+    size_t source_size = strlen(source);
+
+    while(source_size > 0){
+        char *end = memchr(source, '\n', source_size);
+        char *line = strtok(source, "\n");
+        if(line != NULL) translate_line(line);
+
+        if(end != NULL){
+            size_t n = (size_t)(end - source);
+            source_size -= n + 1;
+            source = end + 1;
+        }else{
+            source = end ;
+            source_size = 0 ;
+        }
+    
+    }
+}
+
+void load_asm_from_file(char *path){
+    FILE *filefd = fopen(path, "r");
+    if(!filefd){
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    size_t file_size = get_file_size(filefd);
+    
+    char buffer[file_size];
+    int r = fread(buffer, file_size/2, 2, filefd);
+    if(r == -1){
+        perror("read");
+        exit(EXIT_FAILURE);
+    }
+
+
+    translate_asm(buffer);
+
+}
 
 void write_program_to_file(VM vm ){
     FILE *filefd;
@@ -64,6 +132,7 @@ void write_program_to_file(VM vm ){
     }
 
     int fw = fwrite(vm.program, sizeof(vm.program[0]), vm.program_size, filefd);
+    fclose(filefd);
     if(fw != vm.program_size){
         perror("fwrite");
         exit(EXIT_FAILURE);
@@ -78,19 +147,7 @@ int load_program_from_file(VM *vm){
         exit(EXIT_FAILURE);
     }
 
-    if(fseek(filefd, 0, SEEK_END)){
-        perror("fseek1");
-        exit(EXIT_FAILURE);
-    }
-    long file_size = ftell(filefd);
-    if(file_size <= 0){
-        perror("ftell");
-        exit(EXIT_FAILURE);
-    }
-    if(fseek(filefd, 0, SEEK_SET)){
-        perror("fseek2");
-        exit(EXIT_FAILURE);
-    }
+    size_t file_size = get_file_size(filefd);
 
     if((file_size % sizeof(Inst)) != 0 ){
         fprintf(stderr, "problem with .vm file");
@@ -179,9 +236,7 @@ void dump_mem(VM vm){
 
 
 int main(void){
-    load_program_from_memory(&vm);
-    write_program_to_file(vm);
-    load_program_from_file(&vm);
+
     while(vm.ip < vm.program_size && vm.ip >= 0){
         Trap trap = vm_execute_inst(&vm ,vm.program[vm.ip]);
         if(trap != TRAP_OK){
