@@ -72,23 +72,45 @@ size_t get_file_size(FILE *filefd){
     return file_size;
 }
 
-Inst translate_line(char *line){
-    size_t line_size = strlen(line);
-    char str[4]; 
-    int operand;
-
-    if(sscanf(line, "%4s %d", &str, &operand) == 1) printf("str: %s\n", str);
-    else printf("str: %s, operand: %d\n", str, operand);
-
+void load_line(Inst inst, VM *vm){
+    vm -> program[vm -> program_size] = inst;
+    vm -> program_size++;
 }
 
-void translate_asm(char *source){
+Inst_Type cstr_to_inst(char *str){
+    if(strcmp(str, "push") == 0) return INST_PUSH; 
+    if(strcmp(str, "pop") == 0) return INST_POP; 
+    if(strcmp(str, "add") == 0) return INST_ADD;
+    if(strcmp(str, "sub") == 0) return INST_SUB; 
+    if(strcmp(str, "mul") == 0) return INST_MUL; 
+    if(strcmp(str, "divi") == 0) return INST_DIVI; 
+    if(strcmp(str, "jmp") == 0) return INST_JMP; 
+
+    fprintf(stderr, "unknown instruction\n");
+    exit(EXIT_FAILURE);
+}
+
+Inst translate_line(char *line, VM *vm){
+    size_t line_size = strlen(line);
+    char str[5] = {0}; 
+    int operand = 0;
+
+    int ssf = sscanf(line, "%4s %d", &str, &operand);
+    Inst inst = {
+        .type = cstr_to_inst(str),
+        .operand = operand
+    };
+
+    load_line(inst, vm);
+}
+
+void translate_asm(char *source, VM *vm){
     size_t source_size = strlen(source);
 
     while(source_size > 0){
         char *end = memchr(source, '\n', source_size);
         char *line = strtok(source, "\n");
-        if(line != NULL) translate_line(line);
+        if(line != NULL) translate_line(line, vm);
 
         if(end != NULL){
             size_t n = (size_t)(end - source);
@@ -102,7 +124,7 @@ void translate_asm(char *source){
     }
 }
 
-void load_asm_from_file(char *path){
+void load_asm_from_file(char *path, VM *vm){
     FILE *filefd = fopen(path, "r");
     if(!filefd){
         perror("fopen");
@@ -112,14 +134,14 @@ void load_asm_from_file(char *path){
     size_t file_size = get_file_size(filefd);
     
     char buffer[file_size];
-    int r = fread(buffer, file_size/2, 2, filefd);
+    int r = fread(buffer, file_size, 1, filefd);
     if(r == -1){
         perror("read");
         exit(EXIT_FAILURE);
     }
 
 
-    translate_asm(buffer);
+    translate_asm(buffer, vm);
 
 }
 
@@ -217,7 +239,7 @@ Trap vm_execute_inst(VM *vm, Inst inst){
             break;
         
         case INST_JMP: 
-            if(inst.operand > Program_Size || inst.operand < 0) return TRAP_INVALID_JMP;
+            if(inst.operand > vm->program_size || inst.operand < 0) return TRAP_INVALID_JMP;
 
             vm->ip = inst.operand;
             return TRAP_OK;
@@ -235,8 +257,9 @@ void dump_mem(VM vm){
 }
 
 
-int main(void){
+int main2(void){
 
+    load_asm_from_file("./prog.vasm", &vm);
     while(vm.ip < vm.program_size && vm.ip >= 0){
         Trap trap = vm_execute_inst(&vm ,vm.program[vm.ip]);
         if(trap != TRAP_OK){
@@ -247,4 +270,12 @@ int main(void){
     
     dump_mem(vm);
     return EXIT_SUCCESS;
+}
+
+
+void main(){
+    load_asm_from_file("./prog.vasm", &vm);
+    main2();
+
+
 }
